@@ -12,9 +12,6 @@ PyPDF2==3.0.1
 # Environment Variables
 python-dotenv==1.0.0
 
-# CORS Support
-fastapi-cors==0.0.6
-
 # Additional Utilities
 pydantic==2.5.0
 httpx==0.25.2
