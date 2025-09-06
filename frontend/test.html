@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalAI - Test Page</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center">LegalAI Test Page</h1>
+        
+        <!-- Test Upload -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">1. Document Upload Test</h2>
+            <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">
+                📄 Upload Your Document
+            </button>
+            <div id="uploadStatus" class="mt-4 text-sm"></div>
+        </div>
+        
+        <!-- Test Chat -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">2. AI Chat Test</h2>
+            <div class="flex space-x-2">
+                <input id="chatInput" type="text" placeholder="Ask about your document..." 
+                       class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500">
+                <button id="voiceBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+                    🎙️
+                </button>
+            </div>
+            <div id="chatStatus" class="mt-4 text-sm"></div>
+        </div>
+        
+        <!-- Test Backend Connection -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">3. Backend Connection Test</h2>
+            <button id="testBtn" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg">
+                Test Backend Connection
+            </button>
+            <div id="testStatus" class="mt-4 text-sm"></div>
+        </div>
+        
+        <!-- Results -->
+        <div id="results" class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Results</h2>
+            <div id="resultsContent" class="text-sm"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variable to store current document ID
+        let currentDocumentId = null;
+        
+        // Test Backend Connection
+        document.getElementById('testBtn').addEventListener('click', async function() {
+            const status = document.getElementById('testStatus');
+            status.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                const data = await response.json();
+                
+                if (data.status === 'healthy') {
+                    status.textContent = '✅ Backend is running and healthy!';
+                    status.className = 'mt-4 text-sm text-green-600';
+                } else {
+                    status.textContent = '❌ Backend is not healthy';
+                    status.className = 'mt-4 text-sm text-red-600';
+                }
+            } catch (error) {
+                status.textContent = '❌ Cannot connect to backend: ' + error.message;
+                status.className = 'mt-4 text-sm text-red-600';
+            }
+        });
+        
+        // Test Upload
+        document.getElementById('uploadBtn').addEventListener('click', function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pdf,.doc,.docx,.txt';
+            input.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const status = document.getElementById('uploadStatus');
+                    status.textContent = 'Uploading...';
+                    
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        const response = await fetch('http://localhost:8000/analyze', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            // Store the document ID for chat reference
+                            currentDocumentId = result.document_id;
+                            status.textContent = '✅ Upload successful! Document ready for chat.';
+                            status.className = 'mt-4 text-sm text-green-600';
+                            
+                            // Display results
+                            const resultsContent = document.getElementById('resultsContent');
+                            resultsContent.innerHTML = `
+                                <h3 class="font-semibold mb-2">Analysis Results:</h3>
+                                <pre class="bg-gray-100 p-4 rounded text-xs overflow-auto">${JSON.stringify(result.analysis, null, 2)}</pre>
+                                <p class="mt-2 text-green-600 text-sm">📄 Document ID: ${currentDocumentId}</p>
+                            `;
+                        } else {
+                            throw new Error('Analysis failed');
+                        }
+                        
+                    } catch (error) {
+                        status.textContent = '❌ Upload failed: ' + error.message;
+                        status.className = 'mt-4 text-sm text-red-600';
+                    }
+                }
+            };
+            input.click();
+        });
+        
+        // Test Chat
+        document.getElementById('chatInput').addEventListener('keypress', async function(e) {
+            if (e.key === 'Enter' && this.value.trim()) {
+                const question = this.value.trim();
+                this.value = '';
+                
+                const status = document.getElementById('chatStatus');
+                status.textContent = 'Asking AI...';
+                
+                try {
+                    const response = await fetch('http://localhost:8000/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            question: question,
+                            context: 'legal_document_analysis',
+                            document_id: currentDocumentId
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        status.textContent = '✅ AI responded!';
+                        status.className = 'mt-4 text-sm text-green-600';
+                        
+                        // Display AI response
+                        const resultsContent = document.getElementById('resultsContent');
+                        resultsContent.innerHTML = `
+                            <h3 class="font-semibold mb-2">AI Response:</h3>
+                            <div class="bg-blue-50 p-4 rounded border border-blue-200">
+                                <p class="text-blue-900"><strong>Question:</strong> ${question}</p>
+                                <p class="text-blue-900 mt-2"><strong>Answer:</strong> ${result.answer}</p>
+                            </div>
+                        `;
+                    } else {
+                        throw new Error('AI response failed');
+                    }
+                    
+                } catch (error) {
+                    status.textContent = '❌ Chat failed: ' + error.message;
+                    status.className = 'mt-4 text-sm text-red-600';
+                }
+            }
+        });
+        
+        // Test Voice
+        document.getElementById('voiceBtn').addEventListener('click', function() {
+            if ('webkitSpeechRecognition' in window) {
+                const recognition = new webkitSpeechRecognition();
+                recognition.lang = 'en-US';
+                recognition.start();
+                
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('chatInput').value = transcript;
+                };
+                
+                recognition.onerror = function(event) {
+                    alert('Voice recognition error: ' + event.error);
+                };
+            } else {
+                alert('🎙️ Voice recognition not supported in this browser.');
+            }
+        });
+        
+        // Auto-test backend connection on page load
+        window.addEventListener('load', function() {
+            document.getElementById('testBtn').click();
+        });
+    </script>
+</body>
+</html>
