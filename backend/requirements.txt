@@ -7,7 +7,7 @@ python-multipart==0.0.6
 google-generativeai==0.3.2
 
 # PDF Processing
-pypdf==3.0.1
+pypdf==3.17.4
 
 # Environment Variables
 python-dotenv==1.0.0
