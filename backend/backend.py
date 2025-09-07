@@ -7,7 +7,6 @@ import os
 import json
 import re
 import logging
-from typing import List, Dict, Any, Set, Tuple
 from dotenv import load_dotenv
 import google.generativeai as genai
 
@@ -35,41 +34,42 @@ class DocumentAnalyzer:
     """
     Main class for analyzing legal documents using Google Gemini
     """
-    
+
     def __init__(self):
         self.model = genai.GenerativeModel(GEMINI_MODEL)
         self.max_retries = 3
-    
-    def create_chunks(self, full_text: str) -> List[str]:
+
+    def create_chunks(self, full_text: str):
         """
         Split text into overlapping chunks, respecting sentence boundaries
         """
         # Split by sentence-ending punctuation while keeping delimiters
         sentences = re.split(r'(?<=[.!?])\s+', full_text)
-        
+
         chunks = []
         current_chunk_words = []
-        
+
         for sentence in sentences:
             words = sentence.split()
             if len(current_chunk_words) + len(words) > CHUNK_SIZE:
                 # Finalize current chunk
                 if current_chunk_words:
                     chunks.append(" ".join(current_chunk_words))
-                
+
                 # Start new chunk with overlap
-                overlap_words = current_chunk_words[-CHUNK_OVERLAP:] if len(current_chunk_words) >= CHUNK_OVERLAP else current_chunk_words
+                overlap_words = current_chunk_words[-CHUNK_OVERLAP:] if len(
+                    current_chunk_words) >= CHUNK_OVERLAP else current_chunk_words
                 current_chunk_words = overlap_words + words
             else:
                 current_chunk_words.extend(words)
-        
+
         # Add the last chunk
         if current_chunk_words:
             chunks.append(" ".join(current_chunk_words))
-            
+
         logger.info(f"Document split into {len(chunks)} chunks")
         return chunks
-    
+
     def get_analysis_prompt(self, document_text: str) -> str:
         """
         Create the detailed prompt for Gemini analysis
@@ -102,7 +102,7 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
 ---
 {document_text}
 ---"""
-    
+
     def clean_gemini_response(self, raw_text: str) -> str:
         """
         Clean Gemini's response to extract pure JSON
@@ -111,42 +111,42 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
         json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', raw_text, re.DOTALL)
         if json_match:
             return json_match.group(1).strip()
-        
+
         # Remove any leading/trailing text
         lines = raw_text.strip().split('\n')
         json_start = -1
         json_end = -1
-        
+
         for i, line in enumerate(lines):
             if line.strip().startswith('{'):
                 json_start = i
                 break
-        
+
         for i in range(len(lines) - 1, -1, -1):
             if lines[i].strip().endswith('}'):
                 json_end = i
                 break
-        
+
         if json_start != -1 and json_end != -1:
             return '\n'.join(lines[json_start:json_end + 1])
-        
+
         return raw_text.strip()
-    
-    def analyze_chunk(self, chunk_text: str) -> Dict[str, Any]:
+
+    def analyze_chunk(self, chunk_text: str):
         """
         Analyze a single chunk using Gemini
         """
         prompt = self.get_analysis_prompt(chunk_text)
-        
+
         for attempt in range(self.max_retries):
             try:
                 logger.info(f"Analyzing chunk (attempt {attempt + 1})")
                 response = self.model.generate_content(prompt)
-                
+
                 if response.text:
                     cleaned_json = self.clean_gemini_response(response.text)
                     result = json.loads(cleaned_json)
-                    
+
                     # Validate the result structure
                     required_keys = ["key_parties", "critical_dates", "party_obligations", "red_flags"]
                     if all(key in result for key in required_keys):
@@ -157,14 +157,14 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
                 else:
                     logger.warning(f"Empty response on attempt {attempt + 1}")
                     continue
-                    
+
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON decode error on attempt {attempt + 1}: {e}")
                 continue
             except Exception as e:
                 logger.error(f"Unexpected error on attempt {attempt + 1}: {e}")
                 continue
-        
+
         # Return empty result if all attempts failed
         logger.error("All analysis attempts failed")
         return {
@@ -173,8 +173,8 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
             "party_obligations": {},
             "red_flags": []
         }
-    
-    def merge_results(self, chunk_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+    def merge_results(self, chunk_results):
         """
         Merge and deduplicate results from multiple chunks
         """
@@ -184,12 +184,12 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
             "party_obligations": {},
             "red_flags": []
         }
-        
+
         # Use sets for efficient deduplication
-        seen_parties: Set[Tuple[str, str]] = set()
-        seen_dates: Set[Tuple[str, str]] = set()
-        seen_flags: Set[str] = set()
-        
+        seen_parties = set()
+        seen_dates = set()
+        seen_flags = set()
+
         for result in chunk_results:
             # Merge key_parties
             for party in result.get("key_parties", []):
@@ -197,43 +197,43 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
                 if party_tuple[0] and party_tuple not in seen_parties:
                     final_results["key_parties"].append(party)
                     seen_parties.add(party_tuple)
-            
+
             # Merge critical_dates
             for date in result.get("critical_dates", []):
                 date_tuple = (date.get("event", ""), date.get("date", ""))
                 if date_tuple[0] and date_tuple not in seen_dates:
                     final_results["critical_dates"].append(date)
                     seen_dates.add(date_tuple)
-            
+
             # Merge red_flags
             for flag in result.get("red_flags", []):
                 if flag and flag not in seen_flags:
                     final_results["red_flags"].append(flag)
                     seen_flags.add(flag)
-            
+
             # Merge party_obligations
             for party_name, obligations in result.get("party_obligations", {}).items():
                 if party_name not in final_results["party_obligations"]:
                     final_results["party_obligations"][party_name] = set()
                 final_results["party_obligations"][party_name].update(obligations)
-        
+
         # Convert sets back to lists
         for party_name, ob_set in final_results["party_obligations"].items():
             final_results["party_obligations"][party_name] = sorted(list(ob_set))
-        
+
         logger.info("Results merged and deduplicated successfully")
         return final_results
-    
-    def process_document(self, full_document_text: str) -> Dict[str, Any]:
+
+    def process_document(self, full_document_text: str):
         """
         Main function to process a legal document
         """
         try:
             logger.info("Starting document analysis")
-            
+
             # Step 1: Create chunks
             chunks = self.create_chunks(full_document_text)
-            
+
             # Step 2: Analyze each chunk (Map phase)
             logger.info("Analyzing chunks...")
             chunk_results = []
@@ -241,14 +241,14 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
                 logger.info(f"Processing chunk {i + 1}/{len(chunks)}")
                 result = self.analyze_chunk(chunk)
                 chunk_results.append(result)
-            
+
             # Step 3: Merge results (Reduce phase)
             logger.info("Merging results...")
             final_results = self.merge_results(chunk_results)
-            
+
             logger.info("Document analysis completed successfully")
             return final_results
-            
+
         except Exception as e:
             logger.error(f"Error processing document: {e}")
             return {
@@ -264,7 +264,7 @@ Your entire response MUST consist of ONLY the final, verified JSON object.
 analyzer = DocumentAnalyzer()
 
 
-def process_document(full_document_text: str) -> Dict[str, Any]:
+def process_document(full_document_text: str):
     """
     Convenience function for external use
     """
@@ -279,6 +279,6 @@ if __name__ == "__main__":
     This contract is governed by the laws of California. Innovate Inc. must pay the agreed upon fee 
     within 30 days of project completion. The agreement may be terminated by either party with 30 days notice.
     """
-    
+
     result = process_document(sample_text)
     print(json.dumps(result, indent=2))
