@@ -1,0 +1,19 @@
+{
+  "functions": {
+    "main_api.py": {
+      "runtime": "python3.9"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "main_api.py"
+    }
+  ],
+  "env": {
+    "GOOGLE_API_KEY": "AIzaSyC1YH1hRfXk-Ng-V-dCAthrfm_koVE0iyY",
+    "CHUNK_SIZE": "2000",
+    "CHUNK_OVERLAP": "200",
+    "GEMINI_MODEL": "gemini-1.5-pro-latest"
+  }
+}
