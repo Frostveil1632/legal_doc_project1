@@ -1,10 +1,10 @@
-# FastAPI and Server - Modern versions with Pydantic V2 compatibility
-fastapi==0.108.0
-uvicorn==0.25.0
+# FastAPI and Server - Using older stable versions that don't require Rust
+fastapi==0.95.2
+uvicorn==0.22.0
 python-multipart==0.0.6
 
-# Google AI Integration
-google-generativeai==0.3.2
+# Google AI Integration - Using older version that doesn't require Rust dependencies
+google-generativeai==0.3.0
 
 # PDF Processing
 PyPDF2==3.0.1
@@ -12,12 +12,12 @@ PyPDF2==3.0.1
 # Environment Variables
 python-dotenv==1.0.0
 
-# Data validation - Using Pydantic V2 to fix ForwardRef error
-pydantic==2.5.3
+# Data validation - Using Pydantic V1 (final version) - NO RUST COMPILATION
+pydantic==1.10.17
 
-# HTTP client
-httpx==0.26.0
+# HTTP client - Older version without Rust dependencies
+httpx==0.24.0
 
-# Core compatibility dependencies
-typing-extensions==4.9.0
-annotated-types==0.6.0
+# Core compatibility - Pinning to avoid Rust compilation
+starlette==0.27.0
+typing-extensions==4.5.0
